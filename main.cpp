@@ -6,6 +6,7 @@
 #include <queue>
 #include <condition_variable>
 #include <unistd.h>
+#include "threadpool.hpp"
 
 std::mutex Queue_Mutex;
 std::queue<int> Queue;
@@ -19,8 +20,24 @@ auto timestamp2 = std::chrono::high_resolution_clock::now();
 bool start = false;
 int initialized = 0;
 
+void test2(){
+    std::cout<<"Hello World"<<std::endl;
+}
+
+std::vector<std::thread> thread_pool;
+
+template <class F>
+void run(const F &f) {
+    thread_pool.emplace_back([&](){
+        f();
+    });
+}
+
 int main(int argc, char ** argv){
-    std::vector<std::thread> thread_pool;
+    //test2();
+    run([&](){std::cout<<"hello world"<<std::endl;});
+
+
     const auto thread_id = 0;
     thread_pool.emplace_back([&, thread_id]() {
         {
