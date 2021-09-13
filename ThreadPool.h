@@ -11,11 +11,6 @@
 #include <functional>
 #include <stdexcept>
 
-// class Task {
-// public:
-//     ThreadPool(size_t);
-// }
-
 class ThreadPool {
 public:
     ThreadPool(size_t);
@@ -99,5 +94,44 @@ inline ThreadPool::~ThreadPool()
     for(std::thread &worker: workers)
         worker.join();
 }
+
+
+
+
+// refer to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2008/n2709.html
+template<class F, class... Args>
+class Task {
+public:
+    Task(F&& f, Args&&... args);
+    std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> get_task();
+    void operator()();
+private:
+    std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> task;
+};
+
+template<class F, class... Args>
+Task<F, Args...>::Task(F&& f, Args&&... args){
+    this->task = std::make_shared<std::packaged_task<typename std::result_of<F(Args...)>::type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+}
+
+template<class F, class... Args>
+std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> Task<F, Args...>::get_task(){
+    return this->task;
+}
+
+template<class F, class... Args>
+void Task<F, Args...>::operator()(){
+    (*(this->task))();
+}
+
+// template<typename F, typename ...Args>
+// std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> createTask(F &&f, Args &&...args) {
+//     //using return_type = typename std::result_of<F(Args...)>::type;
+//     auto task = std::make_shared<std::packaged_task<typename std::result_of<F(Args...)>::type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+// 	//auto future = task->task_.get_future();
+// 	//task_queue.push(std::move(task));
+
+// 	return task;
+// }
 
 #endif
