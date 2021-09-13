@@ -10,128 +10,124 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
+#include <cassert>
 
-class ThreadPool {
+// refer to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2008/n2709.html
+template<class F, class... Args>
+class Task {
 public:
-    ThreadPool(size_t);
-    template<class F, class... Args>
-    auto enqueue(F&& f, Args&&... args) 
-        -> std::future<typename std::result_of<F(Args...)>::type>;
-    ~ThreadPool();
+    explicit Task(F&& f);
+    explicit Task(F&& f, Args&&... args);
+    Task(const Task& task) = delete;
+     Task(Task&& task) = delete;
+    ~Task();
+    auto operator()(Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
 private:
-    // need to keep track of threads so we can join them
-    std::vector< std::thread > workers;
-    // the task queue
-    std::queue< std::function<void()> > tasks;
-    
-    // synchronization
-    std::mutex queue_mutex;
-    std::condition_variable condition;
-    bool stop;
-};
- 
-// the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads)
-    :   stop(false)
-{
-    for(size_t i = 0;i<threads;++i)
-        workers.emplace_back(
-            [this]
-            {
-                for(;;)
-                {
-                    std::function<void()> task;
+    // Task
+    F f;
 
+    // Threadpool
+    int max_worker;
+    std::vector<std::thread> workers;
+    void start_threadpool();
+    std::queue<std::function<void()>> tasks;
+
+    // Synchronization
+    bool stop;
+    std::mutex worker_mutex;
+    std::condition_variable worker_condition;
+};
+
+// template<class F, class... Args>
+// Task<F, Args...>::Task(Task&& task) {
+//     std::cout<<"Task move constructors"<<std::endl;
+//     // this->f = std::move(task.f);
+//     // this->max_worker = task.max_worker;
+//     // this->stop = false;
+//     // start_threadpool();
+// }
+
+// template<class F, class... Args>
+// Task<F, Args...>::Task(const Task& task) {
+//     std::cout<<"Task copy constructors"<<std::endl;
+//     // The copy object will share the thread pool with origin object
+//     this->f = task.f;
+//     this->max_worker = 1;
+    
+//     this->stop = task.stop;
+// }
+
+template<class F, class... Args>
+Task<F, Args...>::Task(F&& f) {
+    std::cout<<"new Task1"<<std::endl;
+    this->f = f;
+    this->max_worker = 1;
+    this->stop = false;
+    start_threadpool();
+}
+
+template<class F, class... Args>
+Task<F, Args...>::Task(F&& f, Args&&... args) {
+    std::cout<<"new Task2"<<std::endl;
+    this->f = f;
+    this->max_worker = 1;
+    this->stop = false;
+    start_threadpool();
+}
+
+template<class F, class... Args>
+Task<F, Args...>::~Task() {
+    std::cout<<"delete Task"<<std::endl;
+    {
+        std::unique_lock<std::mutex> lock(this->worker_mutex);
+        this->stop = true;
+    }
+    this->worker_condition.notify_all();
+    for(std::thread &worker: this->workers)
+        worker.join();
+}
+
+template<class F, class... Args>
+inline void Task<F, Args...>::start_threadpool() {
+    std::cout<<"start threadpool"<<std::endl;
+    for(size_t i = 0; i<this->max_worker; ++i) {
+        workers.emplace_back(
+            [this] {
+                while(true) {
+                    std::function<void()> task;
                     {
-                        std::unique_lock<std::mutex> lock(this->queue_mutex);
-                        this->condition.wait(lock,
+                        std::unique_lock<std::mutex> lock(this->worker_mutex);
+                        this->worker_condition.wait(lock,
                             [this]{ return this->stop || !this->tasks.empty(); });
                         if(this->stop && this->tasks.empty())
                             return;
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
                     }
-
                     task();
                 }
             }
         );
+    }
 }
 
-// add new work item to the pool
 template<class F, class... Args>
-auto ThreadPool::enqueue(F&& f, Args&&... args) 
-    -> std::future<typename std::result_of<F(Args...)>::type>
-{
+auto Task<F, Args...>::operator()(Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type> {
     using return_type = typename std::result_of<F(Args...)>::type;
-
-    auto task = std::make_shared< std::packaged_task<return_type()> >(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
-        
+    // Leslie: here may have the overhead to recreate the task
+    auto task = std::make_shared<std::packaged_task<return_type()>>(std::bind(std::forward<F>(this->f), std::forward<Args>(args)...));
     std::future<return_type> res = task->get_future();
     {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-
+        std::unique_lock<std::mutex> lock(this->worker_mutex);
         // don't allow enqueueing after stopping the pool
-        if(stop)
+        if(this->stop)
             throw std::runtime_error("enqueue on stopped ThreadPool");
-
-        tasks.emplace([task](){ (*task)(); });
+        this->tasks.emplace([task](){ (*task)(); });
     }
-    condition.notify_one();
+    this->worker_condition.notify_one();
     return res;
+    // serial execution
+    // (*(this->task))();
 }
-
-// the destructor joins all threads
-inline ThreadPool::~ThreadPool()
-{
-    {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
-    }
-    condition.notify_all();
-    for(std::thread &worker: workers)
-        worker.join();
-}
-
-
-
-
-// refer to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2008/n2709.html
-template<class F, class... Args>
-class Task {
-public:
-    Task(F&& f, Args&&... args);
-    std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> get_task();
-    void operator()();
-private:
-    std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> task;
-};
-
-template<class F, class... Args>
-Task<F, Args...>::Task(F&& f, Args&&... args){
-    this->task = std::make_shared<std::packaged_task<typename std::result_of<F(Args...)>::type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-}
-
-template<class F, class... Args>
-std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> Task<F, Args...>::get_task(){
-    return this->task;
-}
-
-template<class F, class... Args>
-void Task<F, Args...>::operator()(){
-    (*(this->task))();
-}
-
-// template<typename F, typename ...Args>
-// std::shared_ptr<std::packaged_task<typename std::result_of<F(Args...)>::type()>> createTask(F &&f, Args &&...args) {
-//     //using return_type = typename std::result_of<F(Args...)>::type;
-//     auto task = std::make_shared<std::packaged_task<typename std::result_of<F(Args...)>::type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-// 	//auto future = task->task_.get_future();
-// 	//task_queue.push(std::move(task));
-
-// 	return task;
-// }
 
 #endif

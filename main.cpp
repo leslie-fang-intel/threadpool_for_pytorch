@@ -20,36 +20,31 @@
 // bool start = false;
 // int initialized = 0;
 
-// int myfunc(int i)
-// {
-//     std::cout<<"Hello World"<<std::endl;
-//     return i*i;
-// }
-
 int taskfunction(int i) {
 	std::cout << "taskfunction thread num : " << std::this_thread::get_id() << ", arg : " << i << std::endl;
 	return i;
 }
 
 int main(int argc, char ** argv){
-    typedef int (*FunType)(int);
-    auto b = Task<FunType, int>(taskfunction, 12);
-    //(*(b.get_task()))();
-    b();
+    // typedef int (*FunType)(int);
+    // auto b = Task<FunType, int>(taskfunction, 12);
+    //auto b = Task<int (*)(int), int>(taskfunction, 12);
 
-    // ThreadPool pool(1);
-    // std::vector< std::future<int> > results;
+    //auto b = Task<int (*)(int), int>(taskfunction);
 
-    // for(int i = 0; i < 1; ++i) {
-    //     results.emplace_back(
-    //         pool.enqueue([i] {
-    //             return i*i;
-    //         })
-    //     );
-    // }
+    Task<int (*)(int), int> b(taskfunction);
+    // auto c = b; // copy constructors
+    // auto d(std::move(b)); // move constructors
 
-    // for(auto && result: results)
-    //     std::cout << result.get() << ' '<< std::endl;
+    std::vector< std::future<int> > results;
+    // auto resf1 = b(1);
+    // auto resf2 = b(2);
+    results.emplace_back(b(1));
+    results.emplace_back(b(50));
+
+    for(auto && result: results)
+        std::cout << result.get() << ' ' << std::endl;
+
     return 0;
 
     // std::vector<std::thread> thread_pool;
