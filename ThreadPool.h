@@ -1,6 +1,7 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
+#include <iostream>
 #include <vector>
 #include <queue>
 #include <memory>
@@ -12,6 +13,14 @@
 #include <stdexcept>
 #include <cassert>
 
+
+class ThreadPoolExecutor {
+public:
+    explicit ThreadPoolExecutor(int max_worker);
+private:
+    int max_worker;
+};
+
 // refer to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2008/n2709.html
 template<class F, class... Args>
 class Task {
@@ -19,7 +28,7 @@ public:
     explicit Task(F&& f);
     explicit Task(F&& f, Args&&... args);
     Task(const Task& task) = delete;
-     Task(Task&& task) = delete;
+    Task(Task&& task) = delete;
     ~Task();
     auto operator()(Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
 private:
@@ -39,22 +48,21 @@ private:
 };
 
 // template<class F, class... Args>
-// Task<F, Args...>::Task(Task&& task) {
-//     std::cout<<"Task move constructors"<<std::endl;
-//     // this->f = std::move(task.f);
-//     // this->max_worker = task.max_worker;
-//     // this->stop = false;
-//     // start_threadpool();
+// Task<F, Args...>::Task(F&& f) {
+//     std::cout<<"new Task1"<<std::endl;
+//     this->f = f;
+//     this->max_worker = 1;
+//     this->stop = false;
+//     start_threadpool();
 // }
 
 // template<class F, class... Args>
-// Task<F, Args...>::Task(const Task& task) {
-//     std::cout<<"Task copy constructors"<<std::endl;
-//     // The copy object will share the thread pool with origin object
-//     this->f = task.f;
+// Task<F, Args...>::Task(F&& f, Args&&... args) {
+//     std::cout<<"new Task2"<<std::endl;
+//     this->f = f;
 //     this->max_worker = 1;
-    
-//     this->stop = task.stop;
+//     this->stop = false;
+//     start_threadpool();
 // }
 
 template<class F, class... Args>
@@ -88,7 +96,7 @@ Task<F, Args...>::~Task() {
 }
 
 template<class F, class... Args>
-inline void Task<F, Args...>::start_threadpool() {
+void Task<F, Args...>::start_threadpool() {
     std::cout<<"start threadpool"<<std::endl;
     for(size_t i = 0; i<this->max_worker; ++i) {
         workers.emplace_back(
