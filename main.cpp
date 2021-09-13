@@ -29,17 +29,18 @@ int main(int argc, char ** argv){
     // typedef int (*FunType)(int);
     // auto b = Task<FunType, int>(taskfunction, 12);
     //auto b = Task<int (*)(int), int>(taskfunction, 12);
-
+    //Task<int (*)(int), int>(taskfunction);
     //auto b = Task<int (*)(int), int>(taskfunction);
 
-    Task<int (*)(int), int> b(taskfunction);
-    // auto c = b; // copy constructors
-    // auto d(std::move(b)); // move constructors
+    std::shared_ptr<ThreadPoolExecutor> thread_pool = std::make_shared<ThreadPoolExecutor>(1);
+    Task<int (*)(int), int> b(taskfunction, thread_pool);
+    auto c = b; // copy constructors
+    auto d(std::move(b)); // move constructors
 
     std::vector< std::future<int> > results;
     // auto resf1 = b(1);
     // auto resf2 = b(2);
-    results.emplace_back(b(1));
+    results.emplace_back(c(1));
     results.emplace_back(b(50));
 
     for(auto && result: results)
