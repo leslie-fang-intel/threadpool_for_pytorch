@@ -11,7 +11,7 @@ cmake .. -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_pr
 make
 ```
 
-## Run with 2 threads
+## Run
 ```
-LD_PRELOAD=$LD_PRELOAD:/home/lesliefang/pytorch_1_7_1/anaconda3/pkgs/intel-openmp-2021.2.0-h06a4308_610/lib/libiomp5.so ./main
+bash run.sh
 ```
