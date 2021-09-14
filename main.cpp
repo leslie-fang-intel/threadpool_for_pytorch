@@ -8,18 +8,11 @@
 #include <unistd.h>
 #include "ThreadPool.h"
 
+#include <torch/torch.h>
+#include <torch/script.h>
+#include <c10/util/Exception.h>
+
 #include <malloc.h>
-// std::mutex Queue_Mutex;
-// std::queue<int> Queue;
-
-// std::condition_variable worker_main_cv;
-// std::condition_variable main_worker_cv;
-
-// auto timestamp1 = std::chrono::high_resolution_clock::now();
-// auto timestamp2 = std::chrono::high_resolution_clock::now();
-
-// bool start = false;
-// int initialized = 0;
 
 int taskfunction(int i) {
 	std::cout << "taskfunction thread num : " << std::this_thread::get_id() << ", arg : " << i << std::endl;
@@ -30,7 +23,6 @@ int taskfunction(int i) {
 
 int taskfunction2(float* input, float* output) {
 	std::cout << "taskfunction2 thread num : " << std::this_thread::get_id() << std::endl;
-
 #pragma omp parallel
 {
     // __m256 m256_input;
@@ -55,103 +47,55 @@ int taskfunction2(float* input, float* output) {
     //   _mm256_storeu_ps(output+i, m256_output);
     // }
 }
-
 	return 0;
 }
 
-int main(int argc, char ** argv){
+at::Tensor taskfunction3(at::Tensor input) {
+    at::Tensor output;
+    for (size_t i = 0; i < 50000; i++) {
+        output = at::softmax(input, -1);
+    }
+    return input;
+}
+
+int main(int argc, char ** argv) {
+    // std::vector<int32_t> cpu_core_list2({0, 28});
+    // _pin_cpu_cores(cpu_core_list2);
+    // at::Tensor input_tensor2 = at::rand({100, 8276});
+    // taskfunction3(input_tensor2);
+    // return 0;
+
+
     // typedef int (*FunType)(int);
     // auto b = Task<FunType, int>(taskfunction, 12);
     //auto b = Task<int (*)(int), int>(taskfunction, 12);
     //Task<int (*)(int), int>(taskfunction);
     //auto b = Task<int (*)(int), int>(taskfunction);
-    size_t align_size = 64;
-    float* input = (float*)memalign(align_size, sizeof(float) * length);
-    float* output1 = (float*)memalign(align_size, sizeof(float) * length);
-    float* output2 = (float*)memalign(align_size, sizeof(float) * length);
-    float* output3 = (float*)memalign(align_size, sizeof(float) * length);
-    float* output4 = (float*)memalign(align_size, sizeof(float) * length);
-
-    for (size_t i = 0; i < length; i++) {
-        input[i] = rand() / (float)RAND_MAX * 100.f - 50.f;
-        output1[i] = 0;
-        output2[i] = 0;
-        output3[i] = 0;
-        output4[i] = 0;
-    }
 
     std::vector<int32_t> cpu_core_list({1, 26});
-
     std::shared_ptr<ThreadPoolExecutor> thread_pool = std::make_shared<ThreadPoolExecutor>(1, cpu_core_list);
     // Task<int (*)(int), int> b(taskfunction, thread_pool);
     // // auto c = b; // copy constructors
     // // auto d(std::move(b)); // move constructors
 
-    std::vector< std::future<int> > results;
-    // // // auto resf1 = b(1);
-    // // // auto resf2 = b(2);
-    // results.emplace_back(b(1));
-    // // results.emplace_back(b(input, output2));
+
+    // Task<int (*)(float*, float*), float*, float*> b(taskfunction2, thread_pool);
+    // results.emplace_back(b(std::move(input), std::move(output1)));
 
 
-    Task<int (*)(float*, float*), float*, float*> b(taskfunction2, thread_pool);
-    results.emplace_back(b(std::move(input), std::move(output1)));
+    std::vector< std::future<at::Tensor> > results;
+    //at::Tensor input_tensor = at::rand({32, 3, 224, 224});
+    at::Tensor input_tensor = at::rand({100, 8276});
+    //std::cout<<compare_result.dtype()<<std::endl;
+    Task<at::Tensor (*)(at::Tensor), at::Tensor> b(taskfunction3, thread_pool);
+    results.emplace_back(b(std::move(input_tensor)));
 
-
-    for(auto && result: results)
-         std::cout << result.get() << ' ' << std::endl;
+    at::Tensor res;
+    for(auto && result: results) {
+        std::cout<<"waiting to get result"<<std::endl;
+        res = result.get();
+    }
+    //std::cout << res << ' ' << std::endl;
     return 0;
-
-    // std::vector<std::thread> thread_pool;
-    // // run([&](){std::cout<<"hello world"<<std::endl;});
-
-
-    // const auto thread_id = 0;
-    // thread_pool.emplace_back([&, thread_id]() {
-    //     {
-    //         std::unique_lock<std::mutex> lock(Queue_Mutex);
-    //         ++initialized;
-    //         worker_main_cv.notify_one();
-    //         // NOLINTNEXTLINE(bugprone-infinite-loop)
-    //         while (!start) {
-    //             main_worker_cv.wait(lock);
-    //         }
-    //     }
-    //     //std::cout<<"Sub thead finish init"<<std::endl;
-    //     while(true){
-    //         if (!Queue.empty()) {
-    //             timestamp2 = std::chrono::high_resolution_clock::now();
-    //             int data = Queue.front();
-    //             //std::cout<<"sub thread get data: "<<data<<std::endl;
-    //             Queue.pop();
-    //             if(data == 100){
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // });
-
-    // {
-    //     std::unique_lock<std::mutex> lock(Queue_Mutex);
-    //     while (initialized != 1) {
-    //         worker_main_cv.wait(lock);
-    //     }
-    // }
-    // start = true;
-    // main_worker_cv.notify_all();
-    // //std::cout<<"Main thead finish init"<<std::endl;
-    // usleep(1000);
-
-    // timestamp1 = std::chrono::high_resolution_clock::now();
-    // Queue.push(100);
-
-    // for (auto& t : thread_pool) {
-    //     t.join();
-    // }
-    // float submit_time_us = std::chrono::duration_cast<std::chrono::nanoseconds>(
-    //                         timestamp2 - timestamp1).count() / 1000.0;
-    // std::cout<<"submit_time_us is: "<<submit_time_us<<" us"<<std::endl;
-
-    // return 0;
 
 }
