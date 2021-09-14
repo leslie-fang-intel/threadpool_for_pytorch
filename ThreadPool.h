@@ -12,10 +12,21 @@
 #include <functional>
 #include <stdexcept>
 #include <cassert>
+#include <omp.h>
+
+void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list);
+
+extern "C" {
+  typedef void* kmp_affinity_mask_t;
+  void kmp_create_affinity_mask(kmp_affinity_mask_t*);
+  int kmp_set_affinity_mask_proc(int, kmp_affinity_mask_t*);
+  int kmp_set_affinity(kmp_affinity_mask_t*);
+  void kmp_destroy_affinity_mask(kmp_affinity_mask_t*);
+};
 
 class ThreadPoolExecutor {
 public:
-    explicit ThreadPoolExecutor(int max_worker);
+    explicit ThreadPoolExecutor(int max_worker, std::vector<int32_t> cpu_core_list);
     std::mutex& get_mutex();
     std::condition_variable& get_condition();
     bool is_stop();
@@ -30,6 +41,9 @@ private:
     bool stop;
     std::mutex worker_mutex;
     std::condition_variable worker_condition;
+
+    // thread_pool
+    std::vector<int32_t> cpu_core_list;
 };
 
 // refer to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2008/n2709.html
@@ -64,14 +78,14 @@ Task<F, Args...>::Task(Task&& task) {
 
 template<class F, class... Args>
 Task<F, Args...>::Task(F&& f, std::shared_ptr<ThreadPoolExecutor> thread_pool) {
-    std::cout<<"new Task1"<<std::endl;
+    std::cout<<"Task direct constructor1"<<std::endl;
     this->f = f;
     this->thread_pool = thread_pool;
 }
 
 template<class F, class... Args>
 Task<F, Args...>::Task(F&& f, Args&&... args, std::shared_ptr<ThreadPoolExecutor> thread_pool) {
-    std::cout<<"new Task2"<<std::endl;
+    std::cout<<"Task direct constructor2"<<std::endl;
     this->f = f;
     this->thread_pool = thread_pool;
 }

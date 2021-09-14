@@ -1,10 +1,12 @@
 #include "ThreadPool.h"
 
-ThreadPoolExecutor::ThreadPoolExecutor(int max_worker){
+ThreadPoolExecutor::ThreadPoolExecutor(int max_worker, std::vector<int32_t> cpu_core_list){
     this->max_worker = max_worker;
+    this->cpu_core_list = cpu_core_list;
     for(size_t i = 0; i<this->max_worker; ++i) {
         workers.emplace_back(
             [this] {
+                _pin_cpu_cores(this->cpu_core_list);
                 while(true) {
                     std::function<void()> task;
                     {
@@ -48,4 +50,21 @@ ThreadPoolExecutor::~ThreadPoolExecutor() {
     this->worker_condition.notify_all();
     for(std::thread &worker: this->workers)
         worker.join();
+}
+
+void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list) {
+    // Create the OMP thread pool and bind to cores of cpu_pools one by one
+    omp_set_num_threads(cpu_core_list.size());
+    #pragma omp parallel
+    {
+        // set the OMP thread affinity
+        int thread_id = omp_get_thread_num(); // Suppose the ids are [0, 1, 2, 3] if the len of cpu_core_list is 4
+        int phy_core_id = cpu_core_list[thread_id];
+        kmp_affinity_mask_t mask;
+        kmp_create_affinity_mask(&mask);
+        kmp_set_affinity_mask_proc(phy_core_id, &mask);
+        kmp_set_affinity(&mask);
+        kmp_destroy_affinity_mask(&mask);
+    }
+    return;
 }
