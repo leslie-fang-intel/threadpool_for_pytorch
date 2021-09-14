@@ -14,12 +14,24 @@ ThreadPoolExecutor::ThreadPoolExecutor(int max_worker, std::vector<int32_t> cpu_
                         std::unique_lock<std::mutex> lock(this->worker_mutex);
                         this->worker_condition.wait(lock,
                             [this]{ return this->stop || !this->tasks.empty(); });
+
+                        // Measure time2
+                        asm volatile ( "CPUID\n\t"
+                                "RDTSC\n\t"
+                                "mov %%edx, %0\n\t"
+                                "mov %%eax, %1\n\t": "=r" (cycles_high2), "=r" (cycles_low2)::"%rax", "%rbx", "%rcx", "%rdx");
+
                         if(this->stop && this->tasks.empty())
                             return;
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
                     }
                     task();
+                    // Measure time3
+                    asm volatile ( "CPUID\n\t"
+                            "RDTSC\n\t"
+                            "mov %%edx, %0\n\t"
+                            "mov %%eax, %1\n\t": "=r" (cycles_high3), "=r" (cycles_low3)::"%rax", "%rbx", "%rcx", "%rdx");
                 }
             }
         );

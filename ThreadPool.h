@@ -14,6 +14,10 @@
 #include <cassert>
 #include <omp.h>
 
+extern unsigned cycles_low1, cycles_high1, cycles_low2, cycles_high2;
+extern unsigned cycles_low3, cycles_high3, cycles_low4, cycles_high4;
+extern uint64_t timestamp1, timestamp2, timestamp3, timestamp4;
+
 void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list);
 
 extern "C" {
@@ -108,6 +112,7 @@ auto Task<F, Args...>::operator()(Args&&... args) -> std::future<typename std::r
             throw std::runtime_error("enqueue on stopped ThreadPool");
         this->thread_pool->get_tasks().emplace([task](){ (*task)(); });
     }
+
     this->thread_pool->get_condition().notify_one();
     return res;
     // serial execution
