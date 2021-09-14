@@ -56,16 +56,11 @@ ThreadPoolExecutor::~ThreadPoolExecutor() {
 void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list) {
     // Create the OMP thread pool and bind to cores of cpu_pools one by one
     omp_set_num_threads(cpu_core_list.size());
-    // std::cout<<"cpu_core_list.size(): "<<cpu_core_list.size()<<std::endl;
-    // for (int i=0; i<cpu_core_list.size(); i++){
-    //     std::cout<<"cpu_core_list["<<i<<"]: "<<cpu_core_list[i]<<std::endl;
-    // }
-    #pragma omp parallel
+    #pragma omp parallel num_threads(cpu_core_list.size())
     {
         // set the OMP thread affinity
         int thread_id = omp_get_thread_num(); // Suppose the ids are [0, 1, 2, 3] if the len of cpu_core_list is 4
         int phy_core_id = cpu_core_list[thread_id];
-        //std::cout<<"phy_core_id: "<<phy_core_id<<std::endl;
         kmp_affinity_mask_t mask;
         kmp_create_affinity_mask(&mask);
         kmp_set_affinity_mask_proc(phy_core_id, &mask);

@@ -59,20 +59,13 @@ at::Tensor taskfunction3(at::Tensor input) {
 }
 
 int main(int argc, char ** argv) {
-    // std::vector<int32_t> cpu_core_list2({0, 28});
-    // _pin_cpu_cores(cpu_core_list2);
-    // at::Tensor input_tensor2 = at::rand({100, 8276});
-    // taskfunction3(input_tensor2);
-    // return 0;
-
-
     // typedef int (*FunType)(int);
     // auto b = Task<FunType, int>(taskfunction, 12);
     //auto b = Task<int (*)(int), int>(taskfunction, 12);
     //Task<int (*)(int), int>(taskfunction);
     //auto b = Task<int (*)(int), int>(taskfunction);
 
-    std::vector<int32_t> cpu_core_list({1, 26});
+    std::vector<int32_t> cpu_core_list({0, 1, 13, 26, 27});
     std::shared_ptr<ThreadPoolExecutor> thread_pool = std::make_shared<ThreadPoolExecutor>(1, cpu_core_list);
     // Task<int (*)(int), int> b(taskfunction, thread_pool);
     // // auto c = b; // copy constructors
