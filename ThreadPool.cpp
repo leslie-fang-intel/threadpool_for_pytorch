@@ -1,6 +1,11 @@
 #include "ThreadPool.h"
 #include <dlfcn.h>
 
+std::chrono::time_point<std::chrono::high_resolution_clock> timestamp1_nano = std::chrono::high_resolution_clock::now();
+std::chrono::time_point<std::chrono::high_resolution_clock> timestamp2_nano = std::chrono::high_resolution_clock::now();
+std::chrono::time_point<std::chrono::high_resolution_clock> timestamp3_nano = std::chrono::high_resolution_clock::now();
+std::chrono::time_point<std::chrono::high_resolution_clock> timestamp4_nano = std::chrono::high_resolution_clock::now();
+
 kmp_create_affinity_mask_p kmp_create_affinity_mask_ext;
 kmp_set_affinity_mask_proc_p kmp_set_affinity_mask_proc_ext;
 kmp_set_affinity_p kmp_set_affinity_ext;
@@ -42,12 +47,11 @@ bool is_runtime_ext_enabled() {
   return iomp_symbol_loaded;
 }
 
-ThreadPoolExecutor::ThreadPoolExecutor(int max_worker, std::vector<int32_t> cpu_core_list) {
+TaskExecutor::TaskExecutor(const std::vector<int32_t>& cpu_core_list) {
     std::cout<<"inside ThreadPoolExecutor constructor"<<std::endl;
-    this->max_worker = max_worker;
     this->cpu_core_list = cpu_core_list;
-    for(size_t i = 0; i<this->max_worker; ++i) {
-        workers.emplace_back(
+    //for(size_t i = 0; i<this->max_worker; ++i) {
+        this->worker = std::make_shared<std::thread>(
             [this] {
                 _pin_cpu_cores(this->cpu_core_list);
                 while(true) {
@@ -57,54 +61,64 @@ ThreadPoolExecutor::ThreadPoolExecutor(int max_worker, std::vector<int32_t> cpu_
                         this->worker_condition.wait(lock,
                             [this]{ return this->stop || !this->tasks.empty(); });
 
-                        // Measure time2
-                        asm volatile ( "CPUID\n\t"
-                                "RDTSC\n\t"
-                                "mov %%edx, %0\n\t"
-                                "mov %%eax, %1\n\t": "=r" (cycles_high2), "=r" (cycles_low2)::"%rax", "%rbx", "%rcx", "%rdx");
-
                         if(this->stop && this->tasks.empty())
                             return;
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
                     }
+                    // Measure time2
+                    // asm volatile ( "CPUID\n\t"
+                    //         "RDTSC\n\t"
+                    //         "mov %%edx, %0\n\t"
+                    //         "mov %%eax, %1\n\t": "=r" (cycles_high2), "=r" (cycles_low2)::"%rax", "%rbx", "%rcx", "%rdx");
+                    timestamp2_nano = std::chrono::high_resolution_clock::now();
                     task();
                     // Measure time3
-                    asm volatile ( "CPUID\n\t"
-                            "RDTSC\n\t"
-                            "mov %%edx, %0\n\t"
-                            "mov %%eax, %1\n\t": "=r" (cycles_high3), "=r" (cycles_low3)::"%rax", "%rbx", "%rcx", "%rdx");
+                    // asm volatile ( "CPUID\n\t"
+                    //         "RDTSC\n\t"
+                    //         "mov %%edx, %0\n\t"
+                    //         "mov %%eax, %1\n\t": "=r" (cycles_high3), "=r" (cycles_low3)::"%rax", "%rbx", "%rcx", "%rdx");
+                    timestamp3_nano = std::chrono::high_resolution_clock::now();
                 }
             }
         );
-    }
+    //}
 }
 
-std::mutex& ThreadPoolExecutor::get_mutex() {
+std::mutex& TaskExecutor::get_mutex() {
     return this->worker_mutex;
 }
 
-std::condition_variable& ThreadPoolExecutor::get_condition() {
+std::condition_variable& TaskExecutor::get_condition() {
     return this->worker_condition;
 }
 
-bool ThreadPoolExecutor::is_stop() {
+bool TaskExecutor::is_stop() {
     return this->stop;
 }
 
-std::queue<std::function<void()>>& ThreadPoolExecutor::get_tasks() {
+std::queue<std::function<void()>>& TaskExecutor::get_tasks() {
     return this->tasks;
 }
 
-ThreadPoolExecutor::~ThreadPoolExecutor() {
-    std::cout<<"delete ThreadPoolExecutor"<<std::endl;
-    {
-        std::unique_lock<std::mutex> lock(this->worker_mutex);
-        this->stop = true;
+void TaskExecutor::stop_executor() {
+  bool should_wait_worker_join = false;
+  {
+    std::unique_lock<std::mutex> lock(this->worker_mutex);
+    if (this->stop == false) {
+      should_wait_worker_join = true;
+      this->stop = true;
     }
+  }
+  if (should_wait_worker_join) {
     this->worker_condition.notify_all();
-    for(std::thread &worker: this->workers)
-        worker.join();
+    this->worker->join();
+  }
+  return;
+}
+
+TaskExecutor::~TaskExecutor() {
+    this->stop_executor();
 }
 
 void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list) {

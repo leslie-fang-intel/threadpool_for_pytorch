@@ -54,21 +54,28 @@ int taskfunction2(float* input, float* output) {
 	return 0;
 }
 
-at::Tensor taskfunction3(at::Tensor input) {
-    at::Tensor output;
-    for (size_t i = 0; i < 1; i++) {
-        output = at::softmax(input, -1);
-    }
-    return input;
+at::Tensor taskfunction3(const at::Tensor& input) {
+  at::Tensor output;
+  output = at::softmax(input, -1);
+  return output;
+}
+
+at::Tensor taskfunction4(at::Tensor input) {
+  at::Tensor output;
+  output = at::softmax(input, -1);
+  return output;
 }
 
 int main(int argc, char ** argv) {
     std::vector<int32_t> cpu_core_list({1});
-    std::shared_ptr<ThreadPoolExecutor> thread_pool = std::make_shared<ThreadPoolExecutor>(1, cpu_core_list);
+    std::shared_ptr<TaskExecutor> task_executor =
+      std::make_shared<TaskExecutor>(cpu_core_list);
 
     at::Tensor input_tensor = at::rand({100, 8276});
-    Task<at::Tensor (*)(at::Tensor), at::Tensor> b(taskfunction3, thread_pool);
-
+    Task<at::Tensor (*)(const at::Tensor&), at::Tensor> task(
+        taskfunction3, task_executor);
+    // Task<at::Tensor (*)(at::Tensor), at::Tensor> task(
+    //     taskfunction4, task_executor);
     // Warm up time measurement
     asm volatile ( "CPUID\n\t"
                 "RDTSC\n\t"
@@ -87,30 +94,55 @@ int main(int argc, char ** argv) {
 
     std::this_thread::sleep_for(std::chrono::seconds(1)); // to test time, we need to make sure thread pool finish init
 
-    // Measure time1
-    asm volatile ( "CPUID\n\t"
-            "RDTSC\n\t"
-            "mov %%edx, %0\n\t"
-            "mov %%eax, %1\n\t": "=r" (cycles_high1), "=r" (cycles_low1)::"%rax", "%rbx", "%rcx", "%rdx");
+    int iteration = 100;
+    float total_submit_time_us = 0.0;
+    float total_execution_time_us = 0.0;
+    float total_join_time_us = 0.0;
+    for(int i=0;i<iteration;i++) {
+        input_tensor = at::rand({100, 8276});
+        // Measure time1
+        // asm volatile ( "CPUID\n\t"
+        //         "RDTSC\n\t"
+        //         "mov %%edx, %0\n\t"
+        //         "mov %%eax, %1\n\t": "=r" (cycles_high1), "=r" (cycles_low1)::"%rax", "%rbx", "%rcx", "%rdx");
+        timestamp1_nano = std::chrono::high_resolution_clock::now();
 
-    auto resf = b(std::move(input_tensor));
-    std::cout<<"waiting to get result"<<std::endl;
-    auto res = resf.get();
+        auto resf = task(std::move(input_tensor));
+        //std::cout<<"waiting to get result"<<std::endl;
+        auto res = resf.get();
 
-    // Measure time4
-    asm volatile ( "CPUID\n\t"
-            "RDTSC\n\t"
-            "mov %%edx, %0\n\t"
-            "mov %%eax, %1\n\t": "=r" (cycles_high4), "=r" (cycles_low4)::"%rax", "%rbx", "%rcx", "%rdx");
+        // Measure time4
+        // asm volatile ( "CPUID\n\t"
+        //         "RDTSC\n\t"
+        //         "mov %%edx, %0\n\t"
+        //         "mov %%eax, %1\n\t": "=r" (cycles_high4), "=r" (cycles_low4)::"%rax", "%rbx", "%rcx", "%rdx");
+        timestamp4_nano = std::chrono::high_resolution_clock::now();
 
-    timestamp1 = ( ((uint64_t)cycles_high1 << 32) | cycles_low1 );
-    timestamp2 = ( ((uint64_t)cycles_high2 << 32) | cycles_low2 );
-    timestamp3 = ( ((uint64_t)cycles_high3 << 32) | cycles_low3 );
-    timestamp4 = ( ((uint64_t)cycles_high4 << 32) | cycles_low4 );
+        // timestamp1 = ( ((uint64_t)cycles_high1 << 32) | cycles_low1 );
+        // timestamp2 = ( ((uint64_t)cycles_high2 << 32) | cycles_low2 );
+        // timestamp3 = ( ((uint64_t)cycles_high3 << 32) | cycles_low3 );
+        // timestamp4 = ( ((uint64_t)cycles_high4 << 32) | cycles_low4 );
 
-    std::cout<<"submit time clock(timestamp2-timestamp1): "<<timestamp2-timestamp1<<std::endl;
-    std::cout<<"execution time clock(timestamp3-timestamp2): "<<timestamp3-timestamp2<<std::endl;
-    std::cout<<"join time clock(timestamp4-timestamp3): "<<timestamp4-timestamp3<<std::endl;
+        // std::cout<<"submit time clock(timestamp2-timestamp1): "<<timestamp2-timestamp1<<std::endl;
+        // std::cout<<"execution time clock(timestamp3-timestamp2): "<<timestamp3-timestamp2<<std::endl;
+        // std::cout<<"join time clock(timestamp4-timestamp3): "<<timestamp4-timestamp3<<std::endl;
+
+        float submit_time_us = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                timestamp2_nano - timestamp1_nano).count() / 1000.0;
+        float execution_time_us = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                timestamp3_nano - timestamp2_nano).count() / 1000.0;
+        float join_time_us = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                timestamp4_nano - timestamp3_nano).count() / 1000.0;
+        total_submit_time_us += submit_time_us;
+        total_execution_time_us += execution_time_us;
+        total_join_time_us += join_time_us;
+        std::cout<<"submit_time_us is: "<<submit_time_us<<" us"<<std::endl;
+        std::cout<<"execution_time_us is: "<<execution_time_us<<" us"<<std::endl;
+        std::cout<<"join_time_us is: "<<join_time_us<<" us"<<std::endl;
+    }
+    std::cout<<"average submit_time_us is: "<<total_submit_time_us/iteration<<" us"<<std::endl;
+    std::cout<<"average execution_time_us is: "<<total_execution_time_us/iteration<<" us"<<std::endl;
+    std::cout<<"average join_time_us is: "<<total_join_time_us/iteration<<" us"<<std::endl;
 
     return 0;
 
