@@ -1,4 +1,46 @@
 #include "ThreadPool.h"
+#include <dlfcn.h>
+
+kmp_create_affinity_mask_p kmp_create_affinity_mask_ext;
+kmp_set_affinity_mask_proc_p kmp_set_affinity_mask_proc_ext;
+kmp_set_affinity_p kmp_set_affinity_ext;
+kmp_destroy_affinity_mask_p kmp_destroy_affinity_mask_ext;
+kmp_get_affinity_p kmp_get_affinity_ext;
+
+std::once_flag
+    iomp_symbol_loading_call_once_flag; // call_once_flag to ensure the iomp
+                                        // symbol loaded once globally
+bool iomp_symbol_loaded{
+    false}; // Notice: iomp_symbol_loaded is not thread safe.
+
+void loading_iomp_symbol() {
+  void* handle = dlopen(NULL, RTLD_NOW | RTLD_GLOBAL);
+  if (handle == NULL || dlsym(handle, "kmp_create_affinity_mask") == NULL ||
+      dlsym(handle, "kmp_set_affinity_mask_proc") == NULL ||
+      dlsym(handle, "kmp_set_affinity") == NULL ||
+      dlsym(handle, "kmp_get_affinity") == NULL ||
+      dlsym(handle, "kmp_destroy_affinity_mask") == NULL) {
+    iomp_symbol_loaded = false;
+    return;
+  }
+
+  kmp_create_affinity_mask_ext =
+      (kmp_create_affinity_mask_p)dlsym(handle, "kmp_create_affinity_mask");
+  kmp_set_affinity_mask_proc_ext =
+      (kmp_set_affinity_mask_proc_p)dlsym(handle, "kmp_set_affinity_mask_proc");
+  kmp_set_affinity_ext = (kmp_set_affinity_p)dlsym(handle, "kmp_set_affinity");
+  kmp_get_affinity_ext = (kmp_get_affinity_p)dlsym(handle, "kmp_get_affinity");
+  kmp_destroy_affinity_mask_ext =
+      (kmp_destroy_affinity_mask_p)dlsym(handle, "kmp_destroy_affinity_mask");
+
+  iomp_symbol_loaded = true;
+  return;
+}
+
+bool is_runtime_ext_enabled() {
+  std::call_once(iomp_symbol_loading_call_once_flag, loading_iomp_symbol);
+  return iomp_symbol_loaded;
+}
 
 ThreadPoolExecutor::ThreadPoolExecutor(int max_worker, std::vector<int32_t> cpu_core_list) {
     std::cout<<"inside ThreadPoolExecutor constructor"<<std::endl;
@@ -66,6 +108,10 @@ ThreadPoolExecutor::~ThreadPoolExecutor() {
 }
 
 void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list) {
+    if (!is_runtime_ext_enabled()) {
+        throw std::runtime_error(
+            "Didn't preload IOMP before using the runtime API");
+    }
     // Create the OMP thread pool and bind to cores of cpu_pools one by one
     omp_set_num_threads(cpu_core_list.size());
     #pragma omp parallel num_threads(cpu_core_list.size())
@@ -74,10 +120,10 @@ void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list) {
         int thread_id = omp_get_thread_num(); // Suppose the ids are [0, 1, 2, 3] if the len of cpu_core_list is 4
         int phy_core_id = cpu_core_list[thread_id];
         kmp_affinity_mask_t mask;
-        kmp_create_affinity_mask(&mask);
-        kmp_set_affinity_mask_proc(phy_core_id, &mask);
-        kmp_set_affinity(&mask);
-        kmp_destroy_affinity_mask(&mask);
+        kmp_create_affinity_mask_ext(&mask);
+        kmp_set_affinity_mask_proc_ext(phy_core_id, &mask);
+        kmp_set_affinity_ext(&mask);
+        kmp_destroy_affinity_mask_ext(&mask);
     }
     return;
 }

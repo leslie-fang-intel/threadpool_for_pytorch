@@ -20,8 +20,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -liomp5")
-link_directories(/home/lesliefang/pytorch_1_7_1/anaconda3/pkgs/intel-openmp-2021.2.0-h06a4308_610/lib)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ldl")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -liomp5")
+#link_directories(/pytorch/leslie/anaconda3/pkgs/intel-openmp-2021.3.0-h06a4308_3350/lib)
 
 
 # The following code block is suggested to be used on Windows.

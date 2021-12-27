@@ -20,13 +20,12 @@ extern uint64_t timestamp1, timestamp2, timestamp3, timestamp4;
 
 void _pin_cpu_cores(const std::vector<int32_t> &cpu_core_list);
 
-extern "C" {
-  typedef void* kmp_affinity_mask_t;
-  void kmp_create_affinity_mask(kmp_affinity_mask_t*);
-  int kmp_set_affinity_mask_proc(int, kmp_affinity_mask_t*);
-  int kmp_set_affinity(kmp_affinity_mask_t*);
-  void kmp_destroy_affinity_mask(kmp_affinity_mask_t*);
-};
+typedef void* kmp_affinity_mask_t;
+typedef void (*kmp_create_affinity_mask_p)(kmp_affinity_mask_t*);
+typedef int (*kmp_set_affinity_mask_proc_p)(int, kmp_affinity_mask_t*);
+typedef int (*kmp_set_affinity_p)(kmp_affinity_mask_t*);
+typedef void (*kmp_destroy_affinity_mask_p)(kmp_affinity_mask_t*);
+typedef int (*kmp_get_affinity_p)(kmp_affinity_mask_t*);
 
 class ThreadPoolExecutor {
 public:
