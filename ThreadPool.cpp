@@ -50,6 +50,7 @@ bool is_runtime_ext_enabled() {
 TaskExecutor::TaskExecutor(const std::vector<int32_t>& cpu_core_list) {
     std::cout<<"inside ThreadPoolExecutor constructor"<<std::endl;
     this->cpu_core_list = cpu_core_list;
+    this->stop = false;
     //for(size_t i = 0; i<this->max_worker; ++i) {
         this->worker = std::make_shared<std::thread>(
             [this] {
