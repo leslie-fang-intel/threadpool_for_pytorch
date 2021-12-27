@@ -56,7 +56,6 @@ int taskfunction2(float* input, float* output) {
 
 at::Tensor taskfunction3(at::Tensor input) {
     at::Tensor output;
-    //for (size_t i = 0; i < 50000; i++) {
     for (size_t i = 0; i < 1; i++) {
         output = at::softmax(input, -1);
     }
@@ -64,24 +63,9 @@ at::Tensor taskfunction3(at::Tensor input) {
 }
 
 int main(int argc, char ** argv) {
-    // typedef int (*FunType)(int);
-    // auto b = Task<FunType, int>(taskfunction, 12);
-    //auto b = Task<int (*)(int), int>(taskfunction, 12);
-    //Task<int (*)(int), int>(taskfunction);
-    //auto b = Task<int (*)(int), int>(taskfunction);
-
-    std::vector<int32_t> cpu_core_list({0, 1, 2, 3, 4});
+    std::vector<int32_t> cpu_core_list({1});
     std::shared_ptr<ThreadPoolExecutor> thread_pool = std::make_shared<ThreadPoolExecutor>(1, cpu_core_list);
-    //Task<int (*)(int), int> b(taskfunction, thread_pool);
-    // // auto c = b; // copy constructors
-    // // auto d(std::move(b)); // move constructors
 
-
-    // Task<int (*)(float*, float*), float*, float*> b(taskfunction2, thread_pool);
-    // results.emplace_back(b(std::move(input), std::move(output1)));
-
-
-    // std::vector< std::future<at::Tensor> > results;
     at::Tensor input_tensor = at::rand({100, 8276});
     Task<at::Tensor (*)(at::Tensor), at::Tensor> b(taskfunction3, thread_pool);
 
@@ -110,7 +94,6 @@ int main(int argc, char ** argv) {
             "mov %%eax, %1\n\t": "=r" (cycles_high1), "=r" (cycles_low1)::"%rax", "%rbx", "%rcx", "%rdx");
 
     auto resf = b(std::move(input_tensor));
-    //auto resf = b(1);
     std::cout<<"waiting to get result"<<std::endl;
     auto res = resf.get();
 
@@ -124,22 +107,11 @@ int main(int argc, char ** argv) {
     timestamp2 = ( ((uint64_t)cycles_high2 << 32) | cycles_low2 );
     timestamp3 = ( ((uint64_t)cycles_high3 << 32) | cycles_low3 );
     timestamp4 = ( ((uint64_t)cycles_high4 << 32) | cycles_low4 );
-    // std::cout<<"timestamp1 is:"<<timestamp1<<std::endl;
-    // std::cout<<"timestamp2 is:"<<timestamp2<<std::endl;
-    // std::cout<<"timestamp3 is:"<<timestamp3<<std::endl;
-    // std::cout<<"timestamp4 is:"<<timestamp4<<std::endl;
+
     std::cout<<"submit time clock(timestamp2-timestamp1): "<<timestamp2-timestamp1<<std::endl;
     std::cout<<"execution time clock(timestamp3-timestamp2): "<<timestamp3-timestamp2<<std::endl;
     std::cout<<"join time clock(timestamp4-timestamp3): "<<timestamp4-timestamp3<<std::endl;
 
-    // results.emplace_back(b(std::move(input_tensor)));
-
-    // at::Tensor res;
-    // for(auto && result: results) {
-    //     std::cout<<"waiting to get result"<<std::endl;
-    //     res = result.get();
-    // }
-    // //std::cout << res << ' ' << std::endl;
     return 0;
 
 }
